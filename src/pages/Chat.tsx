@@ -1,35 +1,39 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import Navbar from "@/components/Navbar";
 import ChatBubble from "@/components/ChatBubble";
 import TypingIndicator from "@/components/TypingIndicator";
 import {
-  clearActiveSession,
-  getActiveSession,
+  getChatMessages,
   getUserPreferences,
-  saveActiveSession,
+  saveChatMessages,
   type ChatMessage as SessionMessage,
 } from "@/lib/chat-session";
-import {
-  disconnectSession,
-  getSessionState,
-  nextSession,
-  persistSession,
-  sendMessage,
-} from "@/lib/chat-api";
+import { sendRoomMessage, subscribeToRoom } from "@/lib/chat-realtime";
+import { useChatSession } from "@/hooks/use-chat-session";
 
 export default function Chat() {
   const [, setLocation] = useLocation();
-  const [sessionId, setSessionId] = useState(() => getActiveSession()?.sessionId ?? "");
-  const [messages, setMessages] = useState<SessionMessage[]>([]);
+  const { sessionId, roomId, partnerGender, terminalEvent, disconnectCurrent, skipToNextMatch, resetSession } = useChatSession();
+  const [messages, setMessages] = useState<SessionMessage[]>(() =>
+    sessionId && roomId ? getChatMessages(sessionId, roomId) : [],
+  );
   const [inputValue, setInputValue] = useState("");
-  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
-  const [partnerGender, setPartnerGender] = useState<"male" | "female" | undefined>();
-  const [partnerRegion, setPartnerRegion] = useState("Unknown");
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -39,125 +43,120 @@ export default function Chat() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isPartnerTyping]);
+  }, [messages]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    if (!sessionId) {
-      setLocation("/");
+    if (!sessionId || !roomId) {
       return;
     }
 
-    const syncSession = async () => {
-      try {
-        const session = await getSessionState(sessionId);
-        if (cancelled) return;
+    setMessages(getChatMessages(sessionId, roomId));
+  }, [roomId, sessionId]);
 
-        if (session.status === "disconnected") {
-          clearActiveSession();
-          setLocation("/disconnected");
-          return;
-        }
+  useEffect(() => {
+    if (!sessionId || !roomId) {
+      return;
+    }
 
-        setMessages(session.messages);
-        setPartnerGender(session.partner?.gender);
-        setPartnerRegion(session.partner?.region ?? "Unknown");
-        saveActiveSession(persistSession(session));
-      } catch (error) {
-        if (!cancelled) {
-          console.error(error);
-        }
-      }
+    saveChatMessages(sessionId, roomId, messages);
+  }, [messages, roomId, sessionId]);
+
+  useEffect(() => {
+    if (!sessionId && !terminalEvent) {
+      setLocation("/");
+    }
+  }, [sessionId, setLocation, terminalEvent]);
+
+  useEffect(() => {
+    if (terminalEvent) {
+      setLocation("/disconnected");
+    }
+  }, [setLocation, terminalEvent]);
+
+  useEffect(() => {
+    let unsubscribeRoom: (() => void) | undefined;
+
+    if (!sessionId || !roomId) {
+      return;
+    }
+
+    const wireRoom = async () => {
+      unsubscribeRoom = await subscribeToRoom(
+        roomId,
+        (message) => {
+          setMessages((prev) => {
+            if (prev.some((existing) => existing.id === message.id)) {
+              return prev;
+            }
+
+            return [...prev, message];
+          });
+        },
+        sessionId,
+      );
     };
 
-    syncSession();
-    const interval = setInterval(syncSession, 3000);
+    void wireRoom();
 
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      unsubscribeRoom?.();
     };
-  }, [sessionId, setLocation]);
+  }, [roomId, sessionId]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputValue.trim() || !sessionId) return;
-
-    if (!getActiveSession()?.sessionId) {
-      setLocation("/");
-      return;
-    }
+    if (!inputValue.trim() || !sessionId || !roomId) return;
 
     const messageText = inputValue.trim();
     setInputValue("");
     setIsSending(true);
 
     try {
-      const newMessage = await sendMessage(sessionId, messageText);
-      setMessages((prev) => [...prev, newMessage]);
-      setIsPartnerTyping(true);
-
-      const refreshedSession = await getSessionState(sessionId);
-      setMessages(refreshedSession.messages);
-      setPartnerGender(refreshedSession.partner?.gender);
-      setPartnerRegion(refreshedSession.partner?.region ?? "Unknown");
+      await sendRoomMessage(sessionId, roomId, messageText);
     } catch (error) {
       console.error(error);
       setInputValue(messageText);
     } finally {
       setIsSending(false);
-      setIsPartnerTyping(false);
     }
   };
 
   const handleDisconnect = async () => {
-    const activeSession = getActiveSession();
-
     try {
-      if (activeSession?.sessionId) {
-        await disconnectSession(activeSession.sessionId);
-      }
+      await disconnectCurrent();
     } catch (error) {
       console.error(error);
     } finally {
-      clearActiveSession();
       setLocation("/disconnected");
     }
   };
 
   const handleNextChat = async () => {
-    const activeSession = getActiveSession();
     const preferences = getUserPreferences();
 
-    if (!activeSession?.sessionId || !preferences) {
-      clearActiveSession();
+    if (!preferences) {
+      resetSession();
       setLocation("/searching");
       return;
     }
 
     try {
-      const nextMatch = await nextSession(activeSession.sessionId, preferences);
-      saveActiveSession(persistSession(nextMatch));
-      setSessionId(nextMatch.sessionId);
-      setMessages(nextMatch.messages ?? []);
-      setPartnerGender(nextMatch.partner?.gender);
-      setPartnerRegion(nextMatch.partner?.region ?? "Unknown");
-      setLocation(nextMatch.status === "matched" ? "/chat" : "/searching");
+      const nextStatus = await skipToNextMatch(preferences);
+      setMessages([]);
+      setLocation(nextStatus === "MATCHED" ? "/chat" : "/searching");
     } catch (error) {
       console.error(error);
-      clearActiveSession();
+      resetSession();
       setLocation("/searching");
     }
   };
 
   return (
     <div className="flex flex-col h-[100dvh] overflow-hidden bg-gray-50/50">
-      <Navbar 
+      <Navbar
+        isConnected={Boolean(roomId)}
         partnerGender={partnerGender}
-        partnerRegion={partnerRegion}
         onDisconnect={handleDisconnect}
-        onNext={handleNextChat}
       />
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
@@ -172,39 +171,53 @@ export default function Chat() {
                 <ChatBubble text={msg.text} isOwn={msg.isOwn} />
               </motion.div>
             ))}
-            {isPartnerTyping && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-              >
-                <TypingIndicator />
-              </motion.div>
-            )}
           </AnimatePresence>
+          {!roomId && <TypingIndicator />}
           <div ref={messagesEndRef} />
         </div>
       </div>
 
       <div className="p-4 bg-white/80 backdrop-blur-xl border-t border-gray-200/50">
         <form onSubmit={handleSend} className="flex items-center space-x-2 max-w-4xl mx-auto">
-          <Button
-            type="button"
-            onClick={handleNextChat}
-            className="h-14 rounded-2xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 flex-shrink-0 px-4 font-medium shadow-sm transition-all"
-            data-testid="button-next-chat-input"
-          >
-            Next
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                className="h-14 rounded-2xl bg-amber-100 border border-amber-200 text-amber-900 hover:bg-amber-200 flex-shrink-0 px-5 font-semibold shadow-sm transition-all"
+                data-testid="button-next-chat-input"
+              >
+                Skip
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Skip this chat?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Do you really want to skip this stranger and look for someone else?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    void handleNextChat();
+                  }}
+                >
+                  Yes, skip
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Type a message..."
+            placeholder={roomId ? "Type a message..." : "Waiting for match..."}
+            disabled={!roomId}
             className="flex-1 h-14 rounded-2xl bg-gray-50/50 border-gray-200 focus-visible:ring-indigo-500 text-base px-6"
           />
-          <Button 
-            type="submit" 
-            disabled={!inputValue.trim() || isSending}
+          <Button
+            type="submit"
+            disabled={!inputValue.trim() || isSending || !roomId}
             className="h-14 w-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25 flex-shrink-0 transition-all"
           >
             <Send className="w-5 h-5" />

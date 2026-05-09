@@ -1,28 +1,13 @@
-import type {
-  ActiveSession,
-  ChatMessage,
-  PartnerProfile,
-  UserPreferences,
-} from "@/lib/chat-session";
+import type { ActiveSession, AgeRange, Gender, UserPreferences } from "@/lib/chat-session";
 
-export interface MatchResponse {
+export interface CreateSessionResponse {
   sessionId: string;
-  status: "searching" | "matched";
-  partner?: PartnerProfile;
-  messages?: ChatMessage[];
+  status: "IDLE" | "SEARCHING" | "MATCHED" | "DISCONNECTED";
 }
 
 export interface SessionStateResponse {
-  sessionId: string;
-  status: "searching" | "matched" | "disconnected";
-  partner?: PartnerProfile;
-  messages: ChatMessage[];
+  status: "IDLE" | "SEARCHING" | "MATCHED" | "DISCONNECTED";
 }
-
-type PersistableSession =
-  | ActiveSession
-  | MatchResponse
-  | SessionStateResponse;
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
@@ -61,44 +46,50 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return parseResponse<T>(response);
 }
 
-export function startMatch(preferences: UserPreferences) {
-  return request<MatchResponse>("/api/chat/match", {
+function toBackendGender(gender: Gender) {
+  return gender.toUpperCase();
+}
+
+function toBackendAgeRange(ageRange: AgeRange) {
+  switch (ageRange) {
+    case "18-24":
+      return "EIGHTEEN_TO_TWENTY_FOUR";
+    case "25-34":
+      return "TWENTY_FIVE_TO_THIRTY_FOUR";
+    case "35-44":
+      return "THIRTY_FIVE_TO_FORTY_FOUR";
+    case "45+":
+      return "FORTY_FIVE_PLUS";
+  }
+}
+
+export function createSession() {
+  return request<CreateSessionResponse>("/api/session", {
+    method: "POST",
+  });
+}
+
+export function startMatch(sessionId: string, preferences: UserPreferences) {
+  return request<SessionStateResponse>("/api/chat/start", {
     method: "POST",
     body: JSON.stringify({
-      gender: preferences.gender,
-      ageRange: preferences.ageRange,
+      sessionId,
+      gender: toBackendGender(preferences.gender),
+      ageRange: toBackendAgeRange(preferences.ageRange),
     }),
   });
 }
 
-export function getSessionState(sessionId: string) {
-  return request<SessionStateResponse>(`/api/chat/sessions/${sessionId}`);
-}
-
-export function sendMessage(sessionId: string, text: string) {
-  return request<ChatMessage>(`/api/chat/sessions/${sessionId}/messages`, {
-    method: "POST",
-    body: JSON.stringify({ text }),
-  });
-}
-
 export function disconnectSession(sessionId: string) {
-  return request<{ success: true }>(`/api/chat/sessions/${sessionId}/disconnect`, {
+  return request<SessionStateResponse>("/api/chat/disconnect", {
     method: "POST",
+    body: JSON.stringify({ sessionId }),
   });
 }
 
-export async function nextSession(sessionId: string, preferences: UserPreferences) {
-  await request<{ success: true }>(`/api/chat/sessions/${sessionId}/next`, {
-    method: "POST",
-  });
-
-  return startMatch(preferences);
-}
-
-export function persistSession(match: PersistableSession) {
+export function persistSession(match: CreateSessionResponse): ActiveSession {
   return {
     sessionId: match.sessionId,
-    partner: "partner" in match ? match.partner : undefined,
+    status: match.status.toLowerCase() as ActiveSession["status"],
   };
 }

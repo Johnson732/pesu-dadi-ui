@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getUserPreferences, saveUserPreferences } from "@/lib/chat-session";
+import { clearActiveSession, getUserPreferences, saveUserPreferences, type AgeRange } from "@/lib/chat-session";
 
 export default function Home() {
   const [, setLocation] = useLocation();
@@ -30,8 +30,9 @@ export default function Home() {
     if (gender && age) {
       saveUserPreferences({
         gender: gender as "male" | "female",
-        ageRange: age,
+        ageRange: age as AgeRange,
       });
+      clearActiveSession();
       setLocation("/searching");
     }
   };
@@ -75,7 +76,7 @@ export default function Home() {
 
             <div className="space-y-1 pt-8">
               <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">
-                Pesu <span className="text-blue-500">Da</span><span className="text-pink-500">Di</span>
+                Hi <span className="text-blue-500">Da</span><span className="text-pink-500">Di</span>
               </h1>
               <p className="text-base text-gray-400 uppercase tracking-widest font-medium">Anonymous Chat</p>
             </div>
@@ -128,9 +129,10 @@ export default function Home() {
                     <SelectValue placeholder="Select age range" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    <SelectItem value="<18" className="rounded-lg">&lt;18</SelectItem>
-                    <SelectItem value="18-25" className="rounded-lg">18-25</SelectItem>
-                    <SelectItem value="25+" className="rounded-lg">25+</SelectItem>
+                    <SelectItem value="18-24" className="rounded-lg">18-24</SelectItem>
+                    <SelectItem value="25-34" className="rounded-lg">25-34</SelectItem>
+                    <SelectItem value="35-44" className="rounded-lg">35-44</SelectItem>
+                    <SelectItem value="45+" className="rounded-lg">45+</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
