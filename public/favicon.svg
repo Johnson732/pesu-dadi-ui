@@ -1,3 +1,28 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- White background -->
+  <rect width="128" height="128" rx="24" fill="white"/>
+
+  <!-- Soft glow -->
+  <circle cx="64" cy="64" r="58" fill="#7C3AED" fill-opacity="0.08"/>
+
+  <!-- Gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="20" y1="20" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C4DFF"/>
+      <stop offset="1" stop-color="#5B21B6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Bigger main icon circle -->
+  <circle cx="64" cy="64" r="42" fill="url(#bgGradient)"/>
+
+  <!-- Bigger chat bubble -->
+  <path
+    d="M64 44C53.5066 44 45 51.4927 45 60.75C45 64.9935 46.8395 68.8916 49.9375 71.875L48 80L55.925 76.0125C58.3662 76.8229 61.0979 77.25 64 77.25C74.4934 77.25 83 69.7573 83 60.5C83 51.2427 74.4934 44 64 44Z"
+    stroke="white"
+    stroke-width="3.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
 </svg>
