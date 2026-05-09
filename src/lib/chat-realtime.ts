@@ -27,9 +27,18 @@ const WS_URL = `${API_BASE_URL}/ws`;
 
 let client: Client | null = null;
 let clientPromise: Promise<Client> | null = null;
+let clientSessionId: string | null = null;
 
-function ensureClient() {
-  if (client?.connected) {
+async function ensureClient(sessionId?: string) {
+  if (sessionId && client && clientSessionId && clientSessionId !== sessionId) {
+    const staleClient = client;
+    client = null;
+    clientPromise = null;
+    clientSessionId = null;
+    await staleClient.deactivate();
+  }
+
+  if (client?.connected && (!sessionId || clientSessionId === sessionId)) {
     return Promise.resolve(client);
   }
 
@@ -40,10 +49,12 @@ function ensureClient() {
   clientPromise = new Promise<Client>((resolve, reject) => {
     const nextClient = new Client({
       webSocketFactory: () => new SockJS(WS_URL),
+      connectHeaders: sessionId ? { sessionId } : {},
       reconnectDelay: 5000,
       debug: () => {},
       onConnect: () => {
         client = nextClient;
+        clientSessionId = sessionId ?? clientSessionId;
         resolve(nextClient);
       },
       onStompError: (frame) => {
@@ -63,7 +74,7 @@ function ensureClient() {
 }
 
 export async function subscribeToSession(sessionId: string, onEvent: (event: SessionEvent) => void) {
-  const activeClient = await ensureClient();
+  const activeClient = await ensureClient(sessionId);
   const subscription = activeClient.subscribe(`/topic/session/${sessionId}`, (message: IMessage) => {
     onEvent(JSON.parse(message.body) as SessionEvent);
   });

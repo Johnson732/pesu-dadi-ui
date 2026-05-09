@@ -1,5 +1,5 @@
 export type Gender = "male" | "female";
-export type AgeRange = "18-24" | "25-34" | "35-44" | "45+";
+export type AgeRange = "18-25" | "25-35" | ">35";
 export type SessionStatus = "idle" | "searching" | "matched" | "disconnected";
 
 export interface UserPreferences {
@@ -122,15 +122,18 @@ export function clearChatMessages(sessionId: string, roomId: string) {
 
 function normalizeAgeRange(ageRange?: string): AgeRange | null {
   switch (ageRange) {
+    case "18-25":
+    case "25-35":
+    case ">35":
+      return ageRange;
     case "18-24":
+      return "18-25";
     case "25-34":
+      return "25-35";
     case "35-44":
     case "45+":
-      return ageRange;
-    case "18-25":
-      return "18-24";
     case "25+":
-      return "25-34";
+      return ">35";
     default:
       return null;
   }

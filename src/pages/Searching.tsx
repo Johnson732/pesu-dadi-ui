@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
 import { getUserPreferences } from "@/lib/chat-session";
 import { useChatSession } from "@/hooks/use-chat-session";
 
@@ -30,7 +31,12 @@ export default function Searching() {
     void startSearching(preferences).catch((error) => {
       console.error(error);
       resetSession();
-      setLocation("/disconnected");
+      toast({
+        variant: "destructive",
+        title: "Unable to start chat",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+      setLocation("/");
     });
   }, [resetSession, roomId, setLocation, startSearching, status]);
 
@@ -98,7 +104,7 @@ export default function Searching() {
 
         <div className="space-y-2">
           <h2 className="text-2xl font-bold text-gray-900">Searching for someone...</h2>
-          <p className="text-gray-500">Waiting for a match from the Java backend</p>
+          <p className="text-gray-500">Hang tight while we find someone for you</p>
         </div>
 
         <Button

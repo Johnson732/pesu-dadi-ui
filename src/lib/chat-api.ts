@@ -52,14 +52,12 @@ function toBackendGender(gender: Gender) {
 
 function toBackendAgeRange(ageRange: AgeRange) {
   switch (ageRange) {
-    case "18-24":
+    case "18-25":
       return "EIGHTEEN_TO_TWENTY_FOUR";
-    case "25-34":
+    case "25-35":
       return "TWENTY_FIVE_TO_THIRTY_FOUR";
-    case "35-44":
+    case ">35":
       return "THIRTY_FIVE_TO_FORTY_FOUR";
-    case "45+":
-      return "FORTY_FIVE_PLUS";
   }
 }
 
