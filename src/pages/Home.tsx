@@ -76,9 +76,25 @@ export default function Home() {
 
             <div className="space-y-1 pt-8">
               <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">
-                Hi <span className="text-blue-500">Da</span><span className="text-pink-500">Di</span>
+                Hi{" "}
+                <motion.span
+                  animate={{ opacity: [1, 1, 0.2, 0.2, 1] }}
+                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+                  className="text-blue-500"
+                >
+                  Da
+                </motion.span>
+                <motion.span
+                  animate={{ opacity: [0.2, 0.2, 1, 1, 0.2] }}
+                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+                  className="text-rose-400"
+                >
+                  Di
+                </motion.span>
               </h1>
-              <p className="text-base text-gray-400 uppercase tracking-widest font-medium">Anonymous Chat</p>
+              <p className="text-base text-gray-500 tracking-wide font-medium">
+                Connect with strangers. Share a moment. Start something unexpected.
+              </p>
             </div>
           </div>
 
