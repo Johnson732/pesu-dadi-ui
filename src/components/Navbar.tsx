@@ -14,7 +14,7 @@ export default function Navbar({ isConnected = false, partnerGender, onDisconnec
   return (
     <div className="h-16 px-4 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 flex items-center justify-between flex-shrink-0 z-50">
       <div className="flex items-center space-x-4">
-        <h1 className="text-xl font-bold tracking-tight hidden sm:block">
+        <h1 className="text-lg sm:text-xl font-bold tracking-tight whitespace-nowrap">
           <span className="text-gray-900">Hi </span><span className="text-blue-500">Da</span><span className="text-rose-400">Di</span>
         </h1>
         <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border ${isConnected ? "bg-green-50 border-green-100" : "bg-amber-50 border-amber-100"}`}>

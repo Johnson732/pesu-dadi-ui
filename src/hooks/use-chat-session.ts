@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createSession, disconnectSession, persistSession, startMatch } from "@/lib/chat-api";
 import { subscribeToSession, type SessionEvent } from "@/lib/chat-realtime";
 import {
@@ -27,6 +27,13 @@ function normalizePartnerGender(event: SessionEvent): ActiveSession["partner"] {
 export function useChatSession() {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(() => getActiveSession());
   const [terminalEvent, setTerminalEvent] = useState<TerminalSessionEvent>(null);
+  const activeSessionRef = useRef<ActiveSession | null>(activeSession);
+  const unsubscribeSessionRef = useRef<(() => void) | null>(null);
+  const subscriptionPromiseRef = useRef<Promise<void> | null>(null);
+
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
 
   const updateActiveSession = useCallback((nextSession: ActiveSession | null) => {
     setActiveSession(nextSession);
@@ -50,41 +57,76 @@ export function useChatSession() {
     }
   }, []);
 
-  useEffect(() => {
-    let unsubscribeSession: (() => void) | undefined;
+  const ensureSessionSubscription = useCallback(async (session: ActiveSession) => {
+    if (activeSessionRef.current?.sessionId !== session.sessionId) {
+      unsubscribeSessionRef.current?.();
+      unsubscribeSessionRef.current = null;
+      subscriptionPromiseRef.current = null;
+    }
 
-    if (!activeSession?.sessionId) {
+    if (unsubscribeSessionRef.current) {
       return;
     }
 
-    const wireSession = async () => {
-      unsubscribeSession = await subscribeToSession(activeSession.sessionId, (event: SessionEvent) => {
+    if (subscriptionPromiseRef.current) {
+      await subscriptionPromiseRef.current;
+      return;
+    }
+
+    subscriptionPromiseRef.current = (async () => {
+      const unsubscribe = await subscribeToSession(session.sessionId, (event: SessionEvent) => {
+        const currentSession = getActiveSession() ?? activeSessionRef.current ?? session;
+
         if (event.type === "PARTNER_DISCONNECTED" || event.type === "DISCONNECTED") {
-          clearCurrentRoomMessages(getActiveSession() ?? activeSession);
+          clearCurrentRoomMessages(currentSession);
+          unsubscribeSessionRef.current?.();
+          unsubscribeSessionRef.current = null;
+          subscriptionPromiseRef.current = null;
           resetSession();
           setTerminalEvent(event.type);
           return;
         }
 
         setTerminalEvent(null);
-        const latestSession = getActiveSession();
+        const latestSession = getActiveSession() ?? currentSession;
         const nextSession = {
-          ...(latestSession?.sessionId === activeSession.sessionId ? latestSession : activeSession),
+          ...(latestSession?.sessionId === session.sessionId ? latestSession : session),
           roomId: event.roomId ?? undefined,
           status: event.status.toLowerCase() as ActiveSession["status"],
-          partner: normalizePartnerGender(event) ?? latestSession?.partner ?? activeSession.partner,
+          partner: normalizePartnerGender(event) ?? latestSession?.partner ?? session.partner,
         } satisfies ActiveSession;
 
         updateActiveSession(nextSession);
       });
-    };
 
-    void wireSession();
+      unsubscribeSessionRef.current = unsubscribe;
+    })();
+
+    try {
+      await subscriptionPromiseRef.current;
+    } finally {
+      subscriptionPromiseRef.current = null;
+    }
+  }, [clearCurrentRoomMessages, resetSession, updateActiveSession]);
+
+  useEffect(() => {
+    if (!activeSession?.sessionId) {
+      unsubscribeSessionRef.current?.();
+      unsubscribeSessionRef.current = null;
+      subscriptionPromiseRef.current = null;
+      return;
+    }
+
+    void ensureSessionSubscription(activeSession);
 
     return () => {
-      unsubscribeSession?.();
+      if (!activeSessionRef.current?.sessionId) {
+        unsubscribeSessionRef.current?.();
+        unsubscribeSessionRef.current = null;
+        subscriptionPromiseRef.current = null;
+      }
     };
-  }, [activeSession, clearCurrentRoomMessages, resetSession, updateActiveSession]);
+  }, [activeSession?.sessionId, ensureSessionSubscription]);
 
   const startSearching = useCallback(
     async (preferences: UserPreferences) => {
@@ -93,6 +135,7 @@ export function useChatSession() {
       const session = existingSession ?? persistSession(await createSession());
 
       updateActiveSession(session);
+      await ensureSessionSubscription(session);
       const matchState = await startMatch(session.sessionId, preferences);
       const latestSession = getActiveSession();
       updateActiveSession({
@@ -102,7 +145,7 @@ export function useChatSession() {
 
       return matchState.status;
     },
-    [activeSession, updateActiveSession],
+    [activeSession, ensureSessionSubscription, updateActiveSession],
   );
 
   const disconnectCurrent = useCallback(async () => {
