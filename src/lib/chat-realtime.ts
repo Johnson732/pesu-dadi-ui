@@ -22,6 +22,19 @@ export interface RoomMessageEvent {
   timestamp: string;
 }
 
+export interface RoomTypingEvent {
+  type: "TYPING";
+  roomId: string;
+  senderSessionId: string;
+  typing: boolean;
+  timestamp: string;
+}
+
+export type RoomHandlers = {
+  onMessage: (message: ChatMessage) => void;
+  onPartnerTyping?: (typing: boolean) => void;
+};
+
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? window.location.origin).replace(/\/$/, "");
 const WS_URL = `${API_BASE_URL}/ws`;
 
@@ -82,16 +95,22 @@ export async function subscribeToSession(sessionId: string, onEvent: (event: Ses
   return () => subscription.unsubscribe();
 }
 
-export async function subscribeToRoom(roomId: string, onMessage: (message: ChatMessage) => void, sessionId: string) {
+export async function subscribeToRoom(roomId: string, sessionId: string, handlers: RoomHandlers) {
   const activeClient = await ensureClient();
   const subscription: StompSubscription = activeClient.subscribe(`/topic/room/${roomId}`, (message: IMessage) => {
-    const event = JSON.parse(message.body) as RoomMessageEvent;
-    onMessage({
-      id: `${event.roomId}:${event.senderSessionId}:${event.timestamp}`,
-      text: event.content,
-      isOwn: event.senderSessionId === sessionId,
-      createdAt: event.timestamp,
-    });
+    const event = JSON.parse(message.body) as RoomMessageEvent | RoomTypingEvent;
+    if (event.type === "CHAT_MESSAGE") {
+      handlers.onMessage({
+        id: `${event.roomId}:${event.senderSessionId}:${event.timestamp}`,
+        text: event.content,
+        isOwn: event.senderSessionId === sessionId,
+        createdAt: event.timestamp,
+      });
+      return;
+    }
+    if (event.type === "TYPING" && event.senderSessionId !== sessionId) {
+      handlers.onPartnerTyping?.(event.typing);
+    }
   });
 
   return () => subscription.unsubscribe();
@@ -105,6 +124,18 @@ export async function sendRoomMessage(sessionId: string, roomId: string, content
       sessionId,
       roomId,
       content,
+    }),
+  });
+}
+
+export async function sendTypingIndicator(sessionId: string, roomId: string, typing: boolean) {
+  const activeClient = await ensureClient();
+  activeClient.publish({
+    destination: "/app/chat.typing",
+    body: JSON.stringify({
+      sessionId,
+      roomId,
+      typing,
     }),
   });
 }

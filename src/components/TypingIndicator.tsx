@@ -1,9 +1,16 @@
 import { motion } from "framer-motion";
 
-export default function TypingIndicator() {
+type TypingIndicatorProps = {
+  caption?: string;
+};
+
+export default function TypingIndicator({ caption }: TypingIndicatorProps) {
   return (
     <div className="flex justify-start">
-      <div className="bg-white border border-gray-100 rounded-2xl rounded-bl-sm px-5 py-4 shadow-sm flex items-center space-x-1.5 w-fit">
+      <div className="bg-white border border-gray-100 rounded-2xl rounded-bl-sm px-5 py-4 shadow-sm flex items-center gap-3 w-fit max-w-[min(100%,20rem)]">
+        {caption ? (
+          <span className="text-sm text-gray-500 shrink-0">{caption}</span>
+        ) : null}
         <motion.div 
           className="w-1.5 h-1.5 bg-gray-400 rounded-full"
           animate={{ y: [0, -4, 0] }}
